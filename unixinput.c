@@ -129,7 +129,7 @@ void _verbprintf(int verb_level, const char *fmt, ...)
     {
         if (label != NULL)
             fprintf(stdout, "%s: ", label);
-        
+
         if (timestamp) {
             t = time(NULL);
             tm_info = localtime(&t);
@@ -175,7 +175,7 @@ static void input_sound(unsigned int sample_rate, unsigned int overlap,
     unsigned int fbuf_cnt = 0;
     int i;
     short *sp;
-    
+
     if ((fd = open(ifname ? ifname : "/dev/audio", O_RDONLY)) < 0) {
         perror("open");
         exit (10);
@@ -252,7 +252,7 @@ void input_sound(unsigned int sample_rate, unsigned int overlap, const char *ifn
 static void input_sound(unsigned int sample_rate, unsigned int overlap,
                         const char *ifname)
 {
-    
+
     short buffer[8192];
     float fbuf[16384];
     unsigned int fbuf_cnt = 0;
@@ -262,22 +262,22 @@ static void input_sound(unsigned int sample_rate, unsigned int overlap,
 
     (void) ifname;  // Suppress the warning.
 
-    
+
     // Init stuff from pa.org
     pa_simple *s;
     pa_sample_spec ss;
-    
+
     ss.format = PA_SAMPLE_S16NE;
     ss.channels = 1;
     ss.rate = sample_rate;
-    
-    
+
+
     /* Create the recording stream */
     if (!(s = pa_simple_new(NULL, "multimon-ng", PA_STREAM_RECORD, NULL, "record", &ss, NULL, NULL, &error))) {
         fprintf(stderr, "unixinput.c: pa_simple_new() failed: %s\n", pa_strerror(error));
         exit(4);
     }
-    
+
     for (;;) {
         i = pa_simple_read(s, sp = buffer, sizeof(buffer), &error);
         if (i < 0 && errno != EAGAIN) {
@@ -288,7 +288,7 @@ static void input_sound(unsigned int sample_rate, unsigned int overlap,
         i=sizeof(buffer);
         if (!i)
             break;
-        
+
         if (i > 0) {
             if(integer_only)
         {
@@ -329,7 +329,7 @@ static void input_sound(unsigned int sample_rate, unsigned int overlap,
     short *sp;
     unsigned char *bp;
     int fmt = 0;
-    
+
     if ((fd = open(ifname ? ifname : "/dev/dsp", O_RDONLY)) < 0) {
         perror("open");
         exit (10);
@@ -451,7 +451,7 @@ static void input_file(unsigned int sample_rate, unsigned int overlap,
     float fbuf[16384];
     unsigned int fbuf_cnt = 0;
     short *sp;
-    
+
     /*
      * if the input type is not raw, sox is started to convert the
      * samples to the requested format
@@ -475,7 +475,7 @@ static void input_file(unsigned int sample_rate, unsigned int overlap,
             exit(10);
         }
     }
-    
+
 #ifndef ONLY_RAW
     else {
         if (stat(fname, &statbuf)) {
@@ -527,9 +527,9 @@ static void input_file(unsigned int sample_rate, unsigned int overlap,
             break;
         if (i > 0) {
             if(integer_only)
-        {
+            {
                 fbuf_cnt = i/sizeof(buffer[0]);
-        }
+            }
             else
             {
                 for (; (unsigned int) i >= sizeof(buffer[0]); i -= sizeof(buffer[0]), sp++)
@@ -545,7 +545,7 @@ static void input_file(unsigned int sample_rate, unsigned int overlap,
         }
     }
     close(fd);
-    
+
 #ifndef ONLY_RAW
     waitpid(pid, &soxstat, 0);
 #endif
@@ -627,11 +627,11 @@ int main(int argc, char *argv[])
         case '?':
             errflg++;
             break;
-            
+
         case 'q':
             quietflg++;
             break;
-            
+
         case 'A':
             aprs_mode = 1;
             memset(dem_mask, 0, sizeof(dem_mask));
@@ -642,7 +642,7 @@ int main(int argc, char *argv[])
                     break;
                 }
             break;
-            
+
         case 'v':
             verbose_level = strtoul(optarg, 0, 0);
             break;
@@ -667,7 +667,7 @@ int main(int argc, char *argv[])
         case'e':
             pocsag_prune_empty = 1;
             break;
-            
+
         case 'm':
             mute_sox = 1;
             break;
@@ -675,11 +675,11 @@ int main(int argc, char *argv[])
         case 'j':
             fms_justhex = true;
             break;
-            
+
         case 'r':
             repeatable_sox = 1;
             break;
-            
+
         case 't':
             for (itype = (char **)allowed_types; *itype; itype++)
                 if (!strcmp(*itype, optarg)) {
@@ -694,7 +694,7 @@ int main(int argc, char *argv[])
             errflg++;
 intypefound:
             break;
-            
+
         case 'a':
             if (mask_first)
                 memset(dem_mask, 0, sizeof(dem_mask));
@@ -709,7 +709,7 @@ intypefound:
                 errflg++;
             }
             break;
-            
+
         case 's':
             if (mask_first)
                 memset(dem_mask, 0xff, sizeof(dem_mask));
@@ -724,7 +724,7 @@ intypefound:
                 errflg++;
             }
             break;
-            
+
         case 'c':
             if (mask_first)
                 memset(dem_mask, 0xff, sizeof(dem_mask));
@@ -732,7 +732,7 @@ intypefound:
             for (i = 0; (unsigned int) i < NUMDEMOD; i++)
                 MASK_RESET(i);
             break;
-            
+
         case 'f':
             if(!pocsag_mode)
             {
@@ -746,12 +746,12 @@ intypefound:
                     pocsag_mode = POCSAG_MODE_AUTO;
             }else fprintf(stderr, "a POCSAG mode has already been selected!\n");
             break;
-            
+
         case 'C':
     		if (!pocsag_init_charset(optarg))
     			errflg++;
         	break;
-        	
+
         case 'n':
             dont_flush = true;
             break;
@@ -759,7 +759,7 @@ intypefound:
         case 'i':
             pocsag_invert_input = true;
             break;
-            
+
         case 'd':
         {
             int i = 0;
@@ -767,7 +767,7 @@ intypefound:
             if(i) cw_dit_length = abs(i);
             break;
         }
-            
+
         case 'g':
         {
             int i = 0;
@@ -775,7 +775,7 @@ intypefound:
             if(i) cw_gap_length = abs(i);
             break;
         }
-            
+
         case 'o':
         {
             int i = 0;
@@ -783,15 +783,15 @@ intypefound:
             if(i) cw_threshold = abs(i);
             break;
         }
-            
+
         case 'x':
             cw_disable_auto_threshold = true;
             break;
-            
+
         case 'y':
             cw_disable_auto_timing = true;
             break;
-            
+
 	case 'l':
 	    label = optarg;
 	    break;
@@ -817,7 +817,7 @@ intypefound:
     }
     if (mask_first)
         memset(dem_mask, 0xff, sizeof(dem_mask));
-    
+
     if (!quietflg)
         fprintf(stdout, "Enabled demodulators:");
     for (i = 0; (unsigned int) i < NUMDEMOD; i++)
@@ -844,12 +844,12 @@ intypefound:
         }
     if (!quietflg)
         fprintf(stdout, "\n");
-    
+
     if (optind < argc && !strcmp(argv[optind], "-"))
     {
         input_type = "raw";
     }
-    
+
     if (!strcmp(input_type, "hw")) {
         if ((argc - optind) >= 1)
             input_sound(sample_rate, overlap, argv[optind]);
@@ -862,10 +862,10 @@ intypefound:
         (void)fprintf(stderr, "no source files specified\n");
         exit(4);
     }
-    
+
     for (i = optind; i < argc; i++)
         input_file(sample_rate, overlap, argv[i], input_type);
-    
+
     quit();
     exit(0);
 }
