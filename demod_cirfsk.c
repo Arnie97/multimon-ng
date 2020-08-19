@@ -87,10 +87,10 @@ static void cirfsk_demod(struct demod_state *s, buffer_t buffer, int length)
         s->l1.fmsfsk.subsamp = 0;
     }
     for (; length >= SUBSAMP; length -= SUBSAMP, buffer.fbuffer += SUBSAMP) {
-        f = 	fsqr(mac(buffer.fbuffer, corr_1_i, CORRLEN)) +
-               fsqr(mac(buffer.fbuffer, corr_1_q, CORRLEN)) -
-               fsqr(mac(buffer.fbuffer, corr_0_i, CORRLEN)) -
-               fsqr(mac(buffer.fbuffer, corr_0_q, CORRLEN));
+        f = fsqr(mac(buffer.fbuffer, corr_1_i, CORRLEN)) +
+            fsqr(mac(buffer.fbuffer, corr_1_q, CORRLEN)) -
+            fsqr(mac(buffer.fbuffer, corr_0_i, CORRLEN)) -
+            fsqr(mac(buffer.fbuffer, corr_0_q, CORRLEN));
         s->l1.fmsfsk.dcd_shreg <<= 1;
         s->l1.fmsfsk.dcd_shreg |= (f > 0);
         //verbprintf(10, "%c", '0'+(s->l1.fmsfsk.dcd_shreg & 1));
@@ -116,7 +116,7 @@ static void cirfsk_demod(struct demod_state *s, buffer_t buffer, int length)
 /* ---------------------------------------------------------------------- */
 
 const struct demod_param demod_cirfsk = {
-        "CIRFSK", true, FREQ_SAMP, CORRLEN, cirfsk_init, cirfsk_demod, NULL
+    "CIRFSK", true, FREQ_SAMP, CORRLEN, cirfsk_init, cirfsk_demod, NULL
 };
 
 /* ---------------------------------------------------------------------- */

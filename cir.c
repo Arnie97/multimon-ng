@@ -24,33 +24,13 @@
 #include <string.h>
 #include <byteswap.h>
 
-unsigned int CheckMatrix[26][2] = {
-        {119, 33554432},
-        {743, 16777216},
-        {943, 8388608},
-        {779, 4194304},
-        {857, 2097152},
-        {880, 1048576},
-        {440, 524288},
-        {220, 262144},
-        {110, 131072},
-        {55,  65536},
-        {711, 32768},
-        {959, 16384},
-        {771, 8192},
-        {861, 4096},
-        {882, 2048},
-        {441, 1024},
-        {512, 512},
-        {256, 256},
-        {128, 128},
-        {64,  64},
-        {32,  32},
-        {16,  16},
-        {8,   8},
-        {4,   4},
-        {2,   2},
-        {1,   1}
+const unsigned check_matrix[] = {
+    119, 743, 943, 779, 857,
+    880, 440, 220, 110,  55,
+    711, 959, 771, 861,
+    882, 441,
+    512, 256, 128,  64,  32,
+     16,   8,   4,   2,   1,
 };
 
 uint8_t decode_BCH_26_16(uint32_t code, uint16_t *value) {
@@ -59,7 +39,7 @@ uint8_t decode_BCH_26_16(uint32_t code, uint16_t *value) {
     uint32_t decode = code;
     //2.1 calculate remainder
     for (int i = 0; i < 16; i++) {
-        if ((code & 0x2000000) != 0) {
+        if (code & 0x2000000) {
             code ^= gx;
         }
         code = code << 1;
@@ -71,8 +51,8 @@ uint8_t decode_BCH_26_16(uint32_t code, uint16_t *value) {
     }
     //2.2 correct one bit error
     for (int i = 0; i < 26; i++) {
-        if (res == CheckMatrix[i][0]) {
-            decode = decode ^ CheckMatrix[i][1];
+        if (res == check_matrix[i]) {
+            decode ^= 1 << 25 >> i;
             *value = decode >> 10;
             return 1;
         }
@@ -80,8 +60,9 @@ uint8_t decode_BCH_26_16(uint32_t code, uint16_t *value) {
     //2.3 correct two bit error
     for (int i = 0; i < 26; i++) {
         for (int j = i + 1; j < 26; j++) {
-            if (res == (CheckMatrix[i][0] ^ CheckMatrix[j][0])) {
-                decode = decode ^ CheckMatrix[i][1] ^ CheckMatrix[j][1];
+            if (res == (check_matrix[i] ^ check_matrix[j])) {
+                decode ^= 1 << 25 >> i;
+                decode ^= 1 << 25 >> j;
                 *value = decode >> 10;
                 return 2;
             }
