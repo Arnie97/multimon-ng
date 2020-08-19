@@ -24,6 +24,10 @@
 #include <string.h>
 #include <byteswap.h>
 
+#define CURL_STATICLIB
+#include <curl/curl.h>
+extern CURL *curl;
+
 const unsigned check_matrix[] = {
     119, 743, 943, 779, 857,
     880, 440, 220, 110,  55,
@@ -110,6 +114,16 @@ static void cir_display_package(uint8_t *buffer, uint16_t length) {
         verbprintf(0, "%02x ", *(buffer + i));
     }
     verbprintf(0, "\n");
+
+    if (!curl) {
+        return;
+    }
+    curl_easy_reset(curl);
+    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:7700/ffsk");
+    curl_easy_setopt(curl, CURLOPT_POST, 1);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, buffer);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, length);
+    curl_easy_perform(curl);
 }
 
 static void cir_display_package_bad_crc(uint8_t *buffer, uint8_t *err, uint16_t length) {

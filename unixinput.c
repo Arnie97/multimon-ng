@@ -62,6 +62,10 @@
 #include <sys/wait.h>
 #endif
 
+#define CURL_STATICLIB
+#include <curl/curl.h>
+CURL *curl;
+
 /* ---------------------------------------------------------------------- */
 
 static const char *allowed_types[] = {
@@ -560,6 +564,7 @@ void quit(void)
             if (dem[i]->deinit)
                 dem[i]->deinit(dem_st+i);
     }
+    curl_easy_cleanup(curl);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -603,6 +608,7 @@ static const char usage_str[] = "\n"
 
 int main(int argc, char *argv[])
 {
+    curl = curl_easy_init();
     int c;
     int errflg = 0;
     int quietflg = 0;

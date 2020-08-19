@@ -24,17 +24,6 @@ if( WIN32 )
 		"win32_soundin.c"
 		)
 elseif( UNIX )
-	find_package( X11 )
-	if ( X11_FOUND )
-		option( X11_SUPPORT "Enable X11 display support" ${X11_FOUND} )
-		mark_as_advanced( X11_SUPPORT )
-	endif( X11_FOUND )
-	find_package( PulseAudio )
-	if ( PULSEAUDIO_FOUND )
-		option( PULSE_AUDIO_SUPPORT "Enable pulse audio support" ${PULSEAUDIO_FOUND} )
-		mark_as_advanced( PULSE_AUDIO_SUPPORT )
-	endif( PULSEAUDIO_FOUND )
-
 	# Check if we can use the GCC/llvm __builtin_popcount
 	include( CheckCSourceCompiles )
 	check_c_source_compiles(
@@ -42,6 +31,15 @@ elseif( UNIX )
 
 	set( INSTALL_MAN_DIR "${CMAKE_INSTALL_PREFIX}/share/man" )
 	install( FILES multimon-ng.1 DESTINATION "${INSTALL_MAN_DIR}/man1" )
+
+	set(CURL_LIBRARY "-lcurl")
+	find_package(CURL REQUIRED)
+	include_directories(${CURL_INCLUDE_DIR})
+	link_libraries(${CURL_LIBRARIES})
+
+	include_directories(libhttp/include)
+	link_directories(libhttp/lib)
+	link_libraries(libhttp.a)
 endif( WIN32 )
 
 if( X11_SUPPORT )
@@ -53,7 +51,7 @@ if( X11_SUPPORT )
 	)
 else( X11_SUPPORT )
 	add_definitions( "-DNO_X11" )
-endif( X11_SUPPORT ) 
+endif( X11_SUPPORT )
 
 if( PULSE_AUDIO_SUPPORT )
 	include_directories( ${PULSEAUDIO_INCLUDE_DIR} )
