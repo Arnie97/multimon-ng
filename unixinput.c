@@ -116,6 +116,247 @@ extern bool cw_disable_auto_timing;
 
 void quit(void);
 
+/***********************************************************************
+Copyright (c) 2006-2012, Skype Limited. All rights reserved.
+Redistribution and use in source and binary forms, with or without
+modification, (subject to the limitations in the disclaimer below)
+are permitted provided that the following conditions are met:
+- Redistributions of source code must retain the above copyright notice,
+this list of conditions and the following disclaimer.
+- Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+- Neither the name of Skype Limited, nor the names of specific
+contributors, may be used to endorse or promote products derived from
+this software without specific prior written permission.
+NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED
+BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS ''AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+***********************************************************************/
+
+
+/*****************************/
+/* Silk decoder test program */
+/*****************************/
+
+#ifdef _WIN32
+#define _CRT_SECURE_NO_DEPRECATE    1
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "SKP_Silk_SDK_API.h"
+#include "SKP_Silk_SigProc_FIX.h"
+
+/* Define codec specific settings should be moved to h file */
+#define MAX_BYTES_PER_FRAME     1024
+#define MAX_INPUT_FRAMES        5
+#define MAX_FRAME_LENGTH        480
+#define FRAME_LENGTH_MS         20
+#define MAX_API_FS_KHZ          48
+#define MAX_LBRR_DELAY          2
+
+#ifdef _SYSTEM_IS_BIG_ENDIAN
+/* Function to convert a little endian int16 to a */
+/* big endian int16 or vica verca                 */
+void swap_endian(
+    SKP_int16       vec[],
+    SKP_int         len
+)
+{
+    SKP_int i;
+    SKP_int16 tmp;
+    SKP_uint8 *p1, *p2;
+
+    for( i = 0; i < len; i++ ){
+        tmp = vec[ i ];
+        p1 = (SKP_uint8 *)&vec[ i ]; p2 = (SKP_uint8 *)&tmp;
+        p1[ 0 ] = p2[ 1 ]; p1[ 1 ] = p2[ 0 ];
+    }
+}
+#endif
+
+#if (defined(_WIN32) || defined(_WINCE))
+#include <windows.h>	/* timer */
+#else    // Linux or Mac
+#include <sys/time.h>
+#endif
+
+#ifdef _WIN32
+
+unsigned long GetHighResolutionTime() /* O: time in usec*/
+{
+    /* Returns a time counter in microsec	*/
+    /* the resolution is platform dependent */
+    /* but is typically 1.62 us resolution  */
+    LARGE_INTEGER lpPerformanceCount;
+    LARGE_INTEGER lpFrequency;
+    QueryPerformanceCounter(&lpPerformanceCount);
+    QueryPerformanceFrequency(&lpFrequency);
+    return (unsigned long)((1000000*(lpPerformanceCount.QuadPart)) / lpFrequency.QuadPart);
+}
+#else    // Linux or Mac
+unsigned long GetHighResolutionTime() /* O: time in usec*/
+{
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+    return((tv.tv_sec*1000000)+(tv.tv_usec));
+}
+#endif // _WIN32
+
+/* Seed for the random number generator, which is used for simulating packet loss */
+static SKP_int32 rand_seed = 1;
+
+size_t decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_rate, SKP_int16 *decoded)
+{
+    unsigned long tottime, starttime;
+    double    filetime;
+    size_t    counter;
+    size_t    bufUsed = 0;
+    SKP_int32 totPackets, i, k;
+    SKP_int16 ret, len, tot_len;
+    SKP_int16 nBytes;
+    SKP_uint8 payload[    MAX_BYTES_PER_FRAME * MAX_INPUT_FRAMES * ( MAX_LBRR_DELAY + 1 ) ];
+    SKP_uint8 *payloadEnd = NULL, *payloadToDec = NULL;
+    SKP_uint8 FECpayload[ MAX_BYTES_PER_FRAME * MAX_INPUT_FRAMES ], *payloadPtr;
+    SKP_int16 nBytesFEC;
+    SKP_int16 nBytesPerPacket[ MAX_LBRR_DELAY + 1 ], totBytes;
+    SKP_int16 out[ ( ( FRAME_LENGTH_MS * MAX_API_FS_KHZ ) << 1 ) * MAX_INPUT_FRAMES ], *outPtr;
+    FILE      *bitInFile;
+    SKP_int32 packetSize_ms=0;
+    SKP_int32 decSizeBytes;
+    void      *psDec;
+    SKP_float loss_prob;
+    SKP_int32 frames, lost, quiet;
+    SKP_SILK_SDK_DecControlStruct DecControl;
+
+    /* default settings */
+    quiet     = 0;
+    loss_prob = 0.0f;
+
+    /* get arguments */
+    if( !quiet ) {
+        printf("********** Silk Decoder (Fixed Point) v %s ********************\n", SKP_Silk_SDK_get_version());
+        printf("********** Compiled for %d bit cpu *******************************\n", (int)sizeof(void*) * 8 );
+        printf( "Input:                       %s\n", bitInFileName );
+    }
+
+    /* Open files */
+    bitInFile = fopen( bitInFileName, "rb" );
+    if( bitInFile == NULL ) {
+        printf( "Error: could not open input file %s\n", bitInFileName );
+        exit( 0 );
+    }
+
+    /* Check Silk header */
+    {
+        char header_buf[ 50 ];
+        counter = fread( header_buf, sizeof( char ), strlen( "#!SILK_V3" ), bitInFile );
+        header_buf[ strlen( "#!SILK_V3" ) ] = '\0'; /* Terminate with a null character */
+        if( strcmp( header_buf, "#!SILK_V3" ) != 0 ) {
+            /* Non-equal strings */
+            printf( "Error: Wrong Header %s\n", header_buf );
+            exit( 0 );
+        }
+    }
+
+    /* Set the samplingrate that is requested for the output */
+    DecControl.API_sampleRate = sample_rate;
+
+    /* Initialize to one frame per packet, for proper concealment before first packet arrives */
+    DecControl.framesPerPacket = 1;
+
+    /* Create decoder */
+    ret = SKP_Silk_SDK_Get_Decoder_Size( &decSizeBytes );
+    if( ret ) {
+        printf( "\nSKP_Silk_SDK_Get_Decoder_Size returned %d", ret );
+    }
+    psDec = malloc( decSizeBytes );
+
+    /* Reset decoder */
+    ret = SKP_Silk_SDK_InitDecoder( psDec );
+    if( ret ) {
+        printf( "\nSKP_Silk_InitDecoder returned %d", ret );
+    }
+
+    totPackets = 0;
+    tottime    = 0;
+    payloadEnd = payload;
+
+    /* Simulate the jitter buffer holding MAX_FEC_DELAY packets */
+    for( i = 0; i < MAX_LBRR_DELAY; i++ ) {
+        /* Read payload size */
+        counter = fread( &nBytes, sizeof( SKP_int16 ), 1, bitInFile );
+#ifdef _SYSTEM_IS_BIG_ENDIAN
+        swap_endian( &nBytes, 1 );
+#endif
+        /* Read payload */
+        counter = fread( payloadEnd, sizeof( SKP_uint8 ), nBytes, bitInFile );
+
+        if( ( SKP_int16 )counter < nBytes ) {
+            break;
+        }
+        nBytesPerPacket[ i ] = nBytes;
+        payloadEnd          += nBytes;
+        totPackets++;
+    }
+
+    while( 1 ) {
+        /* Read payload size */
+        counter = fread( &nBytes, sizeof( SKP_int16 ), 1, bitInFile );
+#ifdef _SYSTEM_IS_BIG_ENDIAN
+        swap_endian( &nBytes, 1 );
+#endif
+        if( nBytes < 0 || counter < 1 ) {
+            break;
+        }
+
+        /* Read payload */
+        counter = fread( payloadEnd, sizeof( SKP_uint8 ), nBytes, bitInFile );
+        if( ( SKP_int16 )counter < nBytes ) {
+            break;
+        }
+        nBytesPerPacket[ MAX_LBRR_DELAY ] = nBytes;
+        payloadEnd                       += nBytes;
+        #include "silk.c"
+    }
+
+    /* Empty the recieve buffer */
+    for( k = 0; k < MAX_LBRR_DELAY; k++ ) {
+        #include "silk.c"
+    }
+
+    if( !quiet ) {
+        printf( "\nDecoding Finished \n" );
+    }
+
+    /* Free decoder */
+    free( psDec );
+
+    /* Close files */
+    fclose( bitInFile );
+
+    filetime = totPackets * 1e-3 * packetSize_ms;
+    if( !quiet ) {
+        printf("\nFile length:                 %.3f s", filetime);
+        printf("\nTime for decoding:           %.3f s (%.3f%% of realtime)", 1e-6 * tottime, 1e-4 * tottime / filetime);
+        printf("\n\n");
+    } else {
+        /* print time and % of realtime */
+        printf( "%.3f %.3f %d\n", 1e-6 * tottime, 1e-4 * tottime / filetime, totPackets );
+    }
+    return bufUsed;
+}
 /* ---------------------------------------------------------------------- */
 
 void _verbprintf(int verb_level, const char *fmt, ...)
@@ -609,201 +850,25 @@ static const char usage_str[] = "\n"
 int main(int argc, char *argv[])
 {
     curl = curl_easy_init();
-    int c;
     int errflg = 0;
     int quietflg = 0;
-    int i;
-    char **itype;
     int mask_first = 1;
     int sample_rate = -1;
-    unsigned int overlap = 0;
-    char *input_type = "hw";
+    unsigned overlap = 0;
 
-    static struct option long_options[] =
-      {
-        {"timestamp", no_argument, &timestamp, 1},
-        {"label", required_argument, NULL, 'l'},
-        {"charset", required_argument, NULL, 'C'},
-        {0, 0, 0, 0}
-      };
+    verbose_level = 3;
+    pocsag_show_partial_decodes = 1;
+    pocsag_heuristic_pruning = 1;
+    pocsag_prune_empty = 1;
+    pocsag_mode = POCSAG_MODE_NUMERIC;
+    // case 'C': if (!pocsag_init_charset(optarg))
+    // case 'i': pocsag_invert_input = true;
 
-    while ((c = getopt_long(argc, argv, "t:a:s:v:f:b:C:o:d:g:cqhAmrnjeuipxy", long_options, NULL)) != EOF) {
-        switch (c) {
-        case 'h':
-        case '?':
-            errflg++;
-            break;
-
-        case 'q':
-            quietflg++;
-            break;
-
-        case 'A':
-            aprs_mode = 1;
-            memset(dem_mask, 0, sizeof(dem_mask));
-            mask_first = 0;
-            for (i = 0; (unsigned int) i < NUMDEMOD; i++)
-                if (!strcasecmp("AFSK1200", dem[i]->name)) {
-                    MASK_SET(i);
-                    break;
-                }
-            break;
-
-        case 'v':
-            verbose_level = strtoul(optarg, 0, 0);
-            break;
-
-        case 'b':
-            pocsag_error_correction = strtoul(optarg, 0, 0);
-            if(pocsag_error_correction > 2 || pocsag_error_correction < 0)
-            {
-                fprintf(stderr, "Invalid error correction value!\n");
-                pocsag_error_correction = 2;
-            }
-            break;
-
-        case'p':
-            pocsag_show_partial_decodes = 1;
-            break;
-
-        case'u':
-            pocsag_heuristic_pruning = 1;
-            break;
-
-        case'e':
-            pocsag_prune_empty = 1;
-            break;
-
-        case 'm':
-            mute_sox = 1;
-            break;
-
-        case 'j':
-            fms_justhex = true;
-            break;
-
-        case 'r':
-            repeatable_sox = 1;
-            break;
-
-        case 't':
-            for (itype = (char **)allowed_types; *itype; itype++)
-                if (!strcmp(*itype, optarg)) {
-                    input_type = *itype;
-                    goto intypefound;
-                }
-            fprintf(stderr, "invalid input type \"%s\"\n"
-                    "allowed types: ", optarg);
-            for (itype = (char **)allowed_types; *itype; itype++)
-                fprintf(stderr, "%s ", *itype);
-            fprintf(stderr, "\n");
-            errflg++;
-intypefound:
-            break;
-
-        case 'a':
-            if (mask_first)
-                memset(dem_mask, 0, sizeof(dem_mask));
-            mask_first = 0;
-            for (i = 0; (unsigned int) i < NUMDEMOD; i++)
-                if (!strcasecmp(optarg, dem[i]->name)) {
-                    MASK_SET(i);
-                    break;
-                }
-            if ((unsigned int) i >= NUMDEMOD) {
-                fprintf(stderr, "invalid mode \"%s\"\n", optarg);
-                errflg++;
-            }
-            break;
-
-        case 's':
-            if (mask_first)
-                memset(dem_mask, 0xff, sizeof(dem_mask));
-            mask_first = 0;
-            for (i = 0; (unsigned int) i < NUMDEMOD; i++)
-                if (!strcasecmp(optarg, dem[i]->name)) {
-                    MASK_RESET(i);
-                    break;
-                }
-            if ((unsigned int) i >= NUMDEMOD) {
-                fprintf(stderr, "invalid mode \"%s\"\n", optarg);
-                errflg++;
-            }
-            break;
-
-        case 'c':
-            if (mask_first)
-                memset(dem_mask, 0xff, sizeof(dem_mask));
-            mask_first = 0;
-            for (i = 0; (unsigned int) i < NUMDEMOD; i++)
-                MASK_RESET(i);
-            break;
-
-        case 'f':
-            if(!pocsag_mode)
-            {
-                if(!strncmp("numeric",optarg, sizeof("numeric")))
-                    pocsag_mode = POCSAG_MODE_NUMERIC;
-                else if(!strncmp("alpha",optarg, sizeof("alpha")))
-                    pocsag_mode = POCSAG_MODE_ALPHA;
-                else if(!strncmp("skyper",optarg, sizeof("skyper")))
-                    pocsag_mode = POCSAG_MODE_SKYPER;
-                else if(!strncmp("auto",optarg, sizeof("auto")))
-                    pocsag_mode = POCSAG_MODE_AUTO;
-            }else fprintf(stderr, "a POCSAG mode has already been selected!\n");
-            break;
-
-        case 'C':
-    		if (!pocsag_init_charset(optarg))
-    			errflg++;
-        	break;
-
-        case 'n':
-            dont_flush = true;
-            break;
-
-        case 'i':
-            pocsag_invert_input = true;
-            break;
-
-        case 'd':
-        {
-            int i = 0;
-            sscanf(optarg, "%d", &i);
-            if(i) cw_dit_length = abs(i);
-            break;
-        }
-
-        case 'g':
-        {
-            int i = 0;
-            sscanf(optarg, "%d", &i);
-            if(i) cw_gap_length = abs(i);
-            break;
-        }
-
-        case 'o':
-        {
-            int i = 0;
-            sscanf(optarg, "%d", &i);
-            if(i) cw_threshold = abs(i);
-            break;
-        }
-
-        case 'x':
-            cw_disable_auto_threshold = true;
-            break;
-
-        case 'y':
-            cw_disable_auto_timing = true;
-            break;
-
-	case 'l':
-	    label = optarg;
-	    break;
-        }
-    }
-
+    memset(dem_mask, 0, sizeof(dem_mask));
+    for (unsigned i = 0; i < NUMDEMOD; i++)
+        if (!strcasecmp("CIRFSK", dem[i]->name))
+            MASK_SET(i);
+    mask_first = 0;
 
     if ( !quietflg )
     { // pay heed to the quietflg
@@ -811,7 +876,7 @@ intypefound:
         "  (C) 1996/1997 by Tom Sailer HB9JNX/AE4WA\n"
         "  (C) 2012-2019 by Elias Oenal\n"
         "Available demodulators:");
-    for (i = 0; (unsigned int) i < NUMDEMOD; i++) {
+    for (unsigned i = 0; i < NUMDEMOD; i++) {
         fprintf(stderr, " %s", dem[i]->name);
     }
     fprintf(stderr, "\n");
@@ -826,7 +891,7 @@ intypefound:
 
     if (!quietflg)
         fprintf(stdout, "Enabled demodulators:");
-    for (i = 0; (unsigned int) i < NUMDEMOD; i++)
+    for (unsigned i = 0; i < NUMDEMOD; i++)
         if (MASK_ISSET(i)) {
             if (!quietflg)
                 fprintf(stdout, " %s", dem[i]->name);       //Print demod name
@@ -848,29 +913,27 @@ intypefound:
             if (dem[i]->overlap > overlap)
                 overlap = dem[i]->overlap;
         }
-    if (!quietflg)
-        fprintf(stdout, "\n");
 
-    if (optind < argc && !strcmp(argv[optind], "-"))
-    {
-        input_type = "raw";
-    }
+    printf("\n");
 
-    if (!strcmp(input_type, "hw")) {
-        if ((argc - optind) >= 1)
-            input_sound(sample_rate, overlap, argv[optind]);
-        else
-            input_sound(sample_rate, overlap, NULL);
-        quit();
-        exit(0);
-    }
-    if ((argc - optind) < 1) {
-        (void)fprintf(stderr, "no source files specified\n");
-        exit(4);
-    }
+    SKP_int16 decoded[1048576];
+    const char *path = "audio/0771273B17232DB3FBA9CC3192D75A9D.silk";
+    size_t fbuf_i = decode_silk(path, overlap, sample_rate, decoded);
 
-    for (i = optind; i < argc; i++)
-        input_file(sample_rate, overlap, argv[i], input_type);
+    float *fbuf = malloc(16384000);
+    unsigned int fbuf_cnt = 0;
+    short *sp = decoded;
+    if (integer_only) {
+        fbuf_cnt = fbuf_i;
+    } else {
+        while (fbuf_i--)
+            fbuf[fbuf_cnt++] = (*sp++) * (1.0f/32768.0f);
+    }
+    if (fbuf_cnt > overlap) {
+        process_buffer(fbuf, decoded, fbuf_cnt-overlap);
+        memmove(fbuf, fbuf+fbuf_cnt-overlap, overlap*sizeof(fbuf[0]));
+        fbuf_cnt = overlap;
+    }
 
     quit();
     exit(0);

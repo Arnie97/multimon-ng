@@ -15,7 +15,7 @@ set( VERSION "1.1.8" )
 set( MAJOR "1" )
 set( MINOR "1" )
 set( PATCH "8" )
-set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra" )
+set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -ggdb" )
 
 if( WIN32 )
 	add_definitions( "-DWIN32_AUDIO" "-DONLY_RAW" "-DWINDOWS" )
@@ -40,6 +40,9 @@ elseif( UNIX )
 	include_directories(libhttp/include)
 	link_directories(libhttp/lib)
 	link_libraries(libhttp.a)
+
+	include_directories(silk/interface)
+	include_directories(silk/src)
 endif( WIN32 )
 
 if( X11_SUPPORT )
@@ -83,7 +86,9 @@ set( HEADERS ${HEADERS}
     	filter-i386.h
 	)
 
-set( SOURCES ${SOURCES}
+AUX_SOURCE_DIRECTORY(silk/src SILK_SOURCES)
+
+set( SOURCES ${SOURCES} ${SILK_SOURCES}
 	unixinput.c
 	uart.c
 	pocsag.c
