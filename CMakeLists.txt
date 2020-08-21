@@ -37,10 +37,6 @@ elseif( UNIX )
 	include_directories(${CURL_INCLUDE_DIR})
 	link_libraries(${CURL_LIBRARIES})
 
-	include_directories(libhttp/include)
-	link_directories(libhttp/lib)
-	link_libraries(libhttp.a)
-
 	include_directories(silk/interface)
 	include_directories(silk/src)
 endif( WIN32 )

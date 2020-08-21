@@ -217,12 +217,12 @@ unsigned long GetHighResolutionTime() /* O: time in usec*/
 /* Seed for the random number generator, which is used for simulating packet loss */
 static SKP_int32 rand_seed = 1;
 
-size_t decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_rate, SKP_int16 *decoded)
+decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_rate)
 {
     unsigned long tottime, starttime;
     double    filetime;
     size_t    counter;
-    size_t    bufUsed = 0;
+    size_t    fbuf_cnt = 0;
     SKP_int32 totPackets, i, k;
     SKP_int16 ret, len, tot_len;
     SKP_int16 nBytes;
@@ -232,6 +232,7 @@ size_t decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_
     SKP_int16 nBytesFEC;
     SKP_int16 nBytesPerPacket[ MAX_LBRR_DELAY + 1 ], totBytes;
     SKP_int16 out[ ( ( FRAME_LENGTH_MS * MAX_API_FS_KHZ ) << 1 ) * MAX_INPUT_FRAMES ], *outPtr;
+    SKP_float buf[ ( ( FRAME_LENGTH_MS * MAX_API_FS_KHZ ) << 2 ) * MAX_INPUT_FRAMES ];
     FILE      *bitInFile;
     SKP_int32 packetSize_ms=0;
     SKP_int32 decSizeBytes;
@@ -248,7 +249,7 @@ size_t decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_
     if( !quiet ) {
         printf("********** Silk Decoder (Fixed Point) v %s ********************\n", SKP_Silk_SDK_get_version());
         printf("********** Compiled for %d bit cpu *******************************\n", (int)sizeof(void*) * 8 );
-        printf( "Input:                       %s\n", bitInFileName );
+        printf( "Input:       %s\n", bitInFileName );
     }
 
     /* Open files */
@@ -355,7 +356,6 @@ size_t decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_
         /* print time and % of realtime */
         printf( "%.3f %.3f %d\n", 1e-6 * tottime, 1e-4 * tottime / filetime, totPackets );
     }
-    return bufUsed;
 }
 /* ---------------------------------------------------------------------- */
 
@@ -915,25 +915,8 @@ int main(int argc, char *argv[])
         }
 
     printf("\n");
-
-    SKP_int16 decoded[1048576];
-    const char *path = "audio/0771273B17232DB3FBA9CC3192D75A9D.silk";
-    size_t fbuf_i = decode_silk(path, overlap, sample_rate, decoded);
-
-    float *fbuf = malloc(16384000);
-    unsigned int fbuf_cnt = 0;
-    short *sp = decoded;
-    if (integer_only) {
-        fbuf_cnt = fbuf_i;
-    } else {
-        while (fbuf_i--)
-            fbuf[fbuf_cnt++] = (*sp++) * (1.0f/32768.0f);
-    }
-    if (fbuf_cnt > overlap) {
-        process_buffer(fbuf, decoded, fbuf_cnt-overlap);
-        memmove(fbuf, fbuf+fbuf_cnt-overlap, overlap*sizeof(fbuf[0]));
-        fbuf_cnt = overlap;
-    }
+    for (unsigned i = 1; i < argc; i++)
+        decode_silk(argv[i], overlap, sample_rate);
 
     quit();
     exit(0);

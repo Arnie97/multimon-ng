@@ -71,10 +71,18 @@
 #ifdef _SYSTEM_IS_BIG_ENDIAN
         swap_endian( out, tot_len );
 #endif
-        memcpy(&decoded[bufUsed], out, sizeof(SKP_int16) * tot_len);
-        bufUsed += tot_len;
-        /* streaming(out, tot_len); */
         // fwrite( out, sizeof( SKP_int16 ), tot_len, speechOutFile );
+        if (integer_only) {
+            fbuf_cnt = tot_len;
+        } else {
+            for (size_t i = 0; i < tot_len; i++)
+                buf[fbuf_cnt++] = out[i] * (1.0f/32768.0f);
+        }
+        if (fbuf_cnt > overlap) {
+            process_buffer(buf, out, fbuf_cnt-overlap);
+            memmove(buf, buf+fbuf_cnt-overlap, overlap*sizeof(*buf));
+            fbuf_cnt = overlap;
+        }
 
         /* Update buffer */
         totBytes = 0;
@@ -86,5 +94,5 @@
         SKP_memmove( nBytesPerPacket, &nBytesPerPacket[ 1 ], MAX_LBRR_DELAY * sizeof( SKP_int16 ) );
 
         if( !quiet ) {
-            fprintf( stderr, "\rPackets decoded:             %d", totPackets );
+            fprintf( stderr, "\rPacket: %3d  ", totPackets );
         }
