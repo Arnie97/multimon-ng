@@ -21,12 +21,11 @@
 /* ---------------------------------------------------------------------- */
 
 #include "multimon.h"
+#include "mongoose.h"
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <byteswap.h>
-
-#define CURL_STATICLIB
-#include <curl/curl.h>
-extern CURL *curl;
 
 const unsigned check_matrix[] = {
     119, 743, 943, 779, 857,
@@ -107,6 +106,30 @@ static uint16_t actual_rx_length(uint16_t rx_length) {
     return rx_length + 2;
 }
 
+extern struct mg_str resp;
+
+void json_builder(const struct mg_str raw) {
+    size_t hex_len = 2 * raw.len + 4;
+    uint8_t *new;
+    if (!resp.len) {
+        if (!(new = malloc(hex_len)))
+            return;
+    } else {
+        if (!(new = realloc(resp.p, resp.len + hex_len)))
+            return;
+        new[resp.len++] = ',';
+    }
+
+    resp.p = new;
+    new[resp.len++] = '"';
+    cs_to_hex(new + resp.len, raw.p, raw.len);
+    resp.len += 2 * raw.len;
+    new[resp.len++] = '"';
+    new[resp.len] = '\0';
+
+    printf("[%s]\n", resp.p);
+}
+
 static void cir_display_package(uint8_t *buffer, uint16_t length) {
     uint16_t i;
     verbprintf(0, "CIRFSK(%d):", length);
@@ -115,15 +138,7 @@ static void cir_display_package(uint8_t *buffer, uint16_t length) {
     }
     verbprintf(0, "\n");
 
-    if (!curl) {
-        return;
-    }
-    curl_easy_reset(curl);
-    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:7700/ffsk");
-    curl_easy_setopt(curl, CURLOPT_POST, 1);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, buffer);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, length);
-    curl_easy_perform(curl);
+    json_builder(mg_mk_str_n(buffer, length));
 }
 
 static void cir_display_package_bad_crc(uint8_t *buffer, uint8_t *err, uint16_t length) {

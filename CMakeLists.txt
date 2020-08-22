@@ -32,10 +32,7 @@ elseif( UNIX )
 	set( INSTALL_MAN_DIR "${CMAKE_INSTALL_PREFIX}/share/man" )
 	install( FILES multimon-ng.1 DESTINATION "${INSTALL_MAN_DIR}/man1" )
 
-	set(CURL_LIBRARY "-lcurl")
-	find_package(CURL REQUIRED)
-	include_directories(${CURL_INCLUDE_DIR})
-	link_libraries(${CURL_LIBRARIES})
+	include_directories(mongoose)
 
 	include_directories(silk/interface)
 	include_directories(silk/src)
@@ -83,8 +80,9 @@ set( HEADERS ${HEADERS}
 	)
 
 AUX_SOURCE_DIRECTORY(silk/src SILK_SOURCES)
+AUX_SOURCE_DIRECTORY(mongoose MONGOOSE_SOURCES)
 
-set( SOURCES ${SOURCES} ${SILK_SOURCES}
+set( SOURCES ${SOURCES} ${SILK_SOURCES} ${MONGOOSE_SOURCES}
 	unixinput.c
 	uart.c
 	pocsag.c

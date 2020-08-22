@@ -25,6 +25,8 @@
 /* ---------------------------------------------------------------------- */
 
 #include "multimon.h"
+#include "mongoose.h"
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <sys/types.h>
@@ -62,17 +64,6 @@
 #include <sys/wait.h>
 #endif
 
-#define CURL_STATICLIB
-#include <curl/curl.h>
-CURL *curl;
-
-/* ---------------------------------------------------------------------- */
-
-static const char *allowed_types[] = {
-    "raw", "aiff", "au", "hcom", "sf", "voc", "cdr", "dat",
-    "smp", "wav", "maud", "vwe", "mp3", "mp4", "ogg", "flac", NULL
-};
-
 /* ---------------------------------------------------------------------- */
 
 static const struct demod_param *dem[] = { ALL_DEMOD };
@@ -88,6 +79,9 @@ static unsigned int dem_mask[(NUMDEMOD+31)/32];
 
 /* ---------------------------------------------------------------------- */
 
+struct mg_str resp;
+static unsigned overlap = 0;
+static int sample_rate = -1;
 static int verbose_level = 0;
 static int repeatable_sox = 0;
 static int mute_sox = 0;
@@ -115,6 +109,8 @@ extern bool cw_disable_auto_threshold;
 extern bool cw_disable_auto_timing;
 
 void quit(void);
+void http_server(void);
+void process_buffer(float *float_buf, short *short_buf, unsigned int len);
 
 /***********************************************************************
 Copyright (c) 2006-2012, Skype Limited. All rights reserved.
@@ -152,9 +148,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define _CRT_SECURE_NO_DEPRECATE    1
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include "SKP_Silk_SDK_API.h"
 #include "SKP_Silk_SigProc_FIX.h"
 
@@ -214,10 +207,7 @@ unsigned long GetHighResolutionTime() /* O: time in usec*/
 }
 #endif // _WIN32
 
-/* Seed for the random number generator, which is used for simulating packet loss */
-static SKP_int32 rand_seed = 1;
-
-decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_rate)
+int decode_silk(const char *bitInFileName)
 {
     unsigned long tottime, starttime;
     double    filetime;
@@ -237,13 +227,11 @@ decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_rate)
     SKP_int32 packetSize_ms=0;
     SKP_int32 decSizeBytes;
     void      *psDec;
-    SKP_float loss_prob;
     SKP_int32 frames, lost, quiet;
     SKP_SILK_SDK_DecControlStruct DecControl;
 
     /* default settings */
     quiet     = 0;
-    loss_prob = 0.0f;
 
     /* get arguments */
     if( !quiet ) {
@@ -256,7 +244,7 @@ decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_rate)
     bitInFile = fopen( bitInFileName, "rb" );
     if( bitInFile == NULL ) {
         printf( "Error: could not open input file %s\n", bitInFileName );
-        exit( 0 );
+        return 404;
     }
 
     /* Check Silk header */
@@ -267,7 +255,7 @@ decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_rate)
         if( strcmp( header_buf, "#!SILK_V3" ) != 0 ) {
             /* Non-equal strings */
             printf( "Error: Wrong Header %s\n", header_buf );
-            exit( 0 );
+            return 400;
         }
     }
 
@@ -356,6 +344,7 @@ decode_silk(const char *bitInFileName, unsigned overlap, unsigned sample_rate)
         /* print time and % of realtime */
         printf( "%.3f %.3f %d\n", 1e-6 * tottime, 1e-4 * tottime / filetime, totPackets );
     }
+    return 200;
 }
 /* ---------------------------------------------------------------------- */
 
@@ -805,7 +794,6 @@ void quit(void)
             if (dem[i]->deinit)
                 dem[i]->deinit(dem_st+i);
     }
-    curl_easy_cleanup(curl);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -849,12 +837,9 @@ static const char usage_str[] = "\n"
 
 int main(int argc, char *argv[])
 {
-    curl = curl_easy_init();
     int errflg = 0;
     int quietflg = 0;
     int mask_first = 1;
-    int sample_rate = -1;
-    unsigned overlap = 0;
 
     verbose_level = 3;
     pocsag_show_partial_decodes = 1;
@@ -915,11 +900,57 @@ int main(int argc, char *argv[])
         }
 
     printf("\n");
-    for (unsigned i = 1; i < argc; i++)
-        decode_silk(argv[i], overlap, sample_rate);
-
+    http_server();
     quit();
     exit(0);
 }
 
 /* ---------------------------------------------------------------------- */
+
+static void ev_handler(struct mg_connection *c, int ev, void *p)
+{
+    if (ev == MG_EV_HTTP_REQUEST) {
+        struct http_message *hm = (struct http_message *)p;
+
+        // We have received an HTTP request. Parsed request is contained in `hm`.
+        // Send HTTP reply to the client which shows full original request.
+        ((char *)hm->body.p)[hm->body.len] = '\0';
+        mg_send_head(c, decode_silk(hm->body.p), -1, "Content-Type: application/json");
+        if (resp.len)
+            mg_printf_http_chunk(c, "[%s]\r\n", resp.p);
+        mg_strfree(&resp);
+        mg_send_http_chunk(c, "", 0);
+    }
+}
+
+void http_server() {
+    static const char *s_http_port = "7373";
+    static struct mg_serve_http_opts s_http_server_opts;
+    static const char *err_str;
+
+    struct mg_mgr mgr;
+    struct mg_connection *nc;
+    struct mg_bind_opts bind_opts;
+
+    mg_mgr_init(&mgr, NULL);
+    s_http_server_opts.document_root = ".";
+
+    /* Set HTTP server options */
+    memset(&bind_opts, 0, sizeof(bind_opts));
+    bind_opts.error_string = &err_str;
+    if (!(nc = mg_bind_opt(&mgr, s_http_port, ev_handler, bind_opts))) {
+    fprintf(stderr, "Error starting server on port %s: %s\n", s_http_port,
+        *bind_opts.error_string);
+        exit(1);
+    }
+
+    mg_set_protocol_http_websocket(nc);
+    s_http_server_opts.enable_directory_listing = "yes";
+
+    printf("Starting RESTful server on port %s, serving %s\n", s_http_port,
+        s_http_server_opts.document_root);
+    for (;;) {
+        mg_mgr_poll(&mgr, 1000);
+    }
+    mg_mgr_free(&mgr);
+}

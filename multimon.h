@@ -104,7 +104,7 @@ struct demod_state {
             uint32_t rxbitstream;
             uint32_t rxbitbuf;
         } uart;
-        
+
         struct l2_state_hdlc {
             unsigned char rxbuf[512];
             unsigned char *rxptr;
@@ -112,7 +112,7 @@ struct demod_state {
             uint32_t rxbitstream;
             uint32_t rxbitbuf;
         } hdlc;
-        
+
         struct l2_state_eas {
             char last_message[269];
             char msg_buf[4][269];
@@ -148,18 +148,18 @@ struct demod_state {
             uint32_t sphase;
             uint32_t subsamp;
         } poc5;
-        
+
         struct l1_state_poc12 {
             uint32_t dcd_shreg;
             uint32_t sphase;
             uint32_t subsamp;
         } poc12;
-        
+
         struct l1_state_poc24 {
             uint32_t dcd_shreg;
             uint32_t sphase;
         } poc24;
-        
+
         struct l1_state_eas {
             unsigned int dcd_shreg;
             unsigned int sphase;
@@ -169,50 +169,50 @@ struct demod_state {
             int dcd_integrator;
             uint32_t state;
         } eas;
-        
+
         struct l1_state_ufsk12 {
             unsigned int dcd_shreg;
             unsigned int sphase;
             unsigned int subsamp;
         } ufsk12;
-        
+
         struct l1_state_clipfsk {
             unsigned int dcd_shreg;
             unsigned int sphase;
             uint32_t subsamp;
         } clipfsk;
-        
+
         struct l1_state_fmsfsk {
             unsigned int dcd_shreg;
             unsigned int sphase;
             uint32_t subsamp;
         } fmsfsk;
-        
+
         struct l1_state_afsk12 {
             uint32_t dcd_shreg;
             uint32_t sphase;
             uint32_t lasts;
             uint32_t subsamp;
         } afsk12;
-        
+
         struct l1_state_afsk24 {
             unsigned int dcd_shreg;
             unsigned int sphase;
             unsigned int lasts;
         } afsk24;
-        
+
         struct l1_state_hapn48 {
             unsigned int shreg;
             unsigned int sphase;
             float lvllo, lvlhi;
         } hapn48;
-        
+
         struct l1_state_fsk96 {
             unsigned int dcd_shreg;
             unsigned int sphase;
             unsigned int descram;
         } fsk96;
-        
+
         struct l1_state_dtmf {
             unsigned int ph[8];
             float energy[4];
@@ -220,7 +220,7 @@ struct demod_state {
             int blkcount;
             int lastch;
         } dtmf;
-        
+
         struct l1_state_selcall {
             unsigned int ph[16];
             float energy[4];
@@ -246,7 +246,7 @@ struct demod_state {
             int_fast16_t holdoff_samples;
             int_fast8_t current_state;  // High = 1, Low = 0
         } morse;
-        
+
         struct l1_state_dumpcsv {
             uint32_t current_sequence;
 	    } dumpcsv;
