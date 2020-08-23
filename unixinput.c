@@ -249,11 +249,10 @@ int decode_silk(const char *bitInFileName)
 
     /* Check Silk header */
     {
-        char header_buf[ 50 ];
-        counter = fread( header_buf, sizeof( char ), strlen( "#!SILK_V3" ), bitInFile );
-        header_buf[ strlen( "#!SILK_V3" ) ] = '\0'; /* Terminate with a null character */
-        if( strcmp( header_buf, "#!SILK_V3" ) != 0 ) {
-            /* Non-equal strings */
+        const char *header = "\x02#!SILK_V3";
+        char header_buf[ 20 ];
+        counter = fread( header_buf, sizeof( char ), strlen( header ), bitInFile );
+        if( memcmp( header_buf, header, strlen(header) ) != 0 ) {
             printf( "Error: Wrong Header %s\n", header_buf );
             return 400;
         }
