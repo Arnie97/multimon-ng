@@ -915,8 +915,11 @@ static void ev_handler(struct mg_connection *c, int ev, void *p)
         // Send HTTP reply to the client which shows full original request.
         ((char *)hm->body.p)[hm->body.len] = '\0';
         mg_send_head(c, decode_silk(hm->body.p), -1, "Content-Type: application/json");
+
+        const char *p = "";
         if (resp.len)
-            mg_printf_http_chunk(c, "[%s]\r\n", resp.p);
+            p = resp.p;
+        mg_printf_http_chunk(c, "[%s]\r\n", p);
         mg_strfree(&resp);
         mg_send_http_chunk(c, "", 0);
     }
