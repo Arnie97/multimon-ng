@@ -126,8 +126,6 @@ void json_builder(const struct mg_str raw) {
     resp.len += 2 * raw.len;
     new[resp.len++] = '"';
     new[resp.len] = '\0';
-
-    printf("[%s]\n", resp.p);
 }
 
 static void cir_display_package(uint8_t *buffer, uint16_t length) {
@@ -148,6 +146,8 @@ static void cir_display_package_bad_crc(uint8_t *buffer, uint8_t *err, uint16_t 
         verbprintf(1, "%02x%02x-%d ", *(buffer + i * 2), *(buffer + i * 2 + 1), *(err + i));
     }
     verbprintf(1, "\n");
+
+    json_builder(mg_mk_str_n(buffer, length));
 }
 
 
@@ -201,6 +201,7 @@ void cir_rxbit(struct demod_state *s, unsigned char bit) {
                 if (s->l2.cirfsk.fec_errors >= 3) {
                     s->l2.cirfsk.rxbitcount = 0;
                     verbprintf(1, "CIR> %02d FEC too many error\n", s->l2.cirfsk.rx_buf_pos);
+                    json_builder(mg_mk_str_n(NULL, 0));
                     return;
                 }
             }
