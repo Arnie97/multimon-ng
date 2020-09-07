@@ -109,6 +109,8 @@ static uint16_t actual_rx_length(uint16_t rx_length) {
 extern struct mg_str resp;
 
 void json_builder(const struct mg_str raw) {
+    verbprintf(1, "length: %u\n", raw.len);
+
     size_t hex_len = 2 * raw.len + 6;
     uint8_t *new;
     if (!resp.len) {
@@ -129,29 +131,6 @@ void json_builder(const struct mg_str raw) {
     new[resp.len++] = '"';
     new[resp.len] = '\0';
 }
-
-static void cir_display_package(uint8_t *buffer, uint16_t length) {
-    uint16_t i;
-    verbprintf(0, "CIRFSK(%d):", length);
-    for (i = 0; i < length; i++) {
-        verbprintf(0, "%02x ", *(buffer + i));
-    }
-    verbprintf(0, "\n");
-
-    json_builder(mg_mk_str_n(buffer, length));
-}
-
-static void cir_display_package_bad_crc(uint8_t *buffer, uint8_t *err, uint16_t length) {
-    uint16_t i;
-    verbprintf(1, "CIRFSK(%d)(broken):", length);
-    for (i = 0; i < length / 2; i++) {
-        verbprintf(1, "%02x%02x-%d ", *(buffer + i * 2), *(buffer + i * 2 + 1), *(err + i));
-    }
-    verbprintf(1, "\n");
-
-    json_builder(mg_mk_str_n(buffer, length));
-}
-
 
 void cir_rxbit(struct demod_state *s, unsigned char bit) {
     // According to standard TB/T 3052-2002
@@ -215,19 +194,18 @@ void cir_rxbit(struct demod_state *s, unsigned char bit) {
                     verbprintf(1, "CIR> zero length\n");
                     return;
                 }
-                verbprintf(2, "CIR> Length:%d\n", length);
+                verbprintf(2, "CIR> length: %d\n", length);
             }
                 // if receive completed, check crc
             else if (s->l2.cirfsk.rx_buf_pos == actual_rx_length(s->l2.cirfsk.rxlength)) {
                 uint16_t crc = crc16(s->l2.cirfsk.rxbuf, s->l2.cirfsk.rxlength);
                 if ((((crc >> 8) & 0x00ff) == s->l2.cirfsk.rxbuf[s->l2.cirfsk.rxlength]) && \
                     ((crc & 0x00ff) == s->l2.cirfsk.rxbuf[s->l2.cirfsk.rxlength + 1])) {
-                    verbprintf(2, "crc ok\n");
-                    cir_display_package(s->l2.cirfsk.rxbuf, s->l2.cirfsk.rxlength + 2);
+                    verbprintf(1, "CIR> crc ok, ");
+                    json_builder(mg_mk_str_n(s->l2.cirfsk.rxbuf, s->l2.cirfsk.rxlength + 2));
                 } else {
-                    verbprintf(1, "CIR> bad crc\n");
-                    cir_display_package_bad_crc(s->l2.cirfsk.rxbuf, s->l2.cirfsk.rx_err,
-                                                actual_rx_length(s->l2.cirfsk.rxlength));
+                    verbprintf(1, "CIR> bad crc, ");
+                    json_builder(mg_mk_str_n(s->l2.cirfsk.rxbuf, actual_rx_length(s->l2.cirfsk.rxlength)));
                 }
                 s->l2.cirfsk.rxbitcount = 0;
                 return;

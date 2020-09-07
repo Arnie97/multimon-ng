@@ -237,7 +237,6 @@ int decode_silk(const char *bitInFileName)
     if( !quiet ) {
         printf("********** Silk Decoder (Fixed Point) v %s ********************\n", SKP_Silk_SDK_get_version());
         printf("********** Compiled for %d bit cpu *******************************\n", (int)sizeof(void*) * 8 );
-        printf( "Input:       %s\n", bitInFileName );
     }
 
     /* Open files */
@@ -324,10 +323,6 @@ int decode_silk(const char *bitInFileName)
         #include "silk.c"
     }
 
-    if( !quiet ) {
-        printf( "\nDecoding Finished \n" );
-    }
-
     /* Free decoder */
     free( psDec );
 
@@ -336,9 +331,14 @@ int decode_silk(const char *bitInFileName)
 
     filetime = totPackets * 1e-3 * packetSize_ms;
     if( !quiet ) {
-        printf("\nFile length:                 %.3f s", filetime);
-        printf("\nTime for decoding:           %.3f s (%.3f%% of realtime)", 1e-6 * tottime, 1e-4 * tottime / filetime);
-        printf("\n\n");
+        printf(
+            "\n"
+            "\n********** Decoding finished *************************************"
+            "\nFile name:          %s"
+            "\nFile length:        %.3f s"
+            "\nTime for decoding:  %.3f s (%.3f%% of realtime)"
+            "\n",
+            bitInFileName, filetime, 1e-6 * tottime, 1e-4 * tottime / filetime);
     } else {
         /* print time and % of realtime */
         printf( "%.3f %.3f %d\n", 1e-6 * tottime, 1e-4 * tottime / filetime, totPackets );
@@ -919,7 +919,7 @@ static void ev_handler(struct mg_connection *c, int ev, void *p)
         const char *p = "";
         if (resp.len)
             p = resp.p;
-        printf("HTTP Response: [\r\n%s]\r\n", p);
+        printf("HTTP Response:      [\n%s\n]\n\n", p);
         mg_printf_http_chunk(c, "[%s]\r\n", p);
         mg_strfree(&resp);
         mg_send_http_chunk(c, "", 0);
