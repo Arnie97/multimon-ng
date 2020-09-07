@@ -109,7 +109,7 @@ static uint16_t actual_rx_length(uint16_t rx_length) {
 extern struct mg_str resp;
 
 void json_builder(const struct mg_str raw) {
-    size_t hex_len = 2 * raw.len + 4;
+    size_t hex_len = 2 * raw.len + 6;
     uint8_t *new;
     if (!resp.len) {
         if (!(new = malloc(hex_len)))
@@ -118,6 +118,8 @@ void json_builder(const struct mg_str raw) {
         if (!(new = realloc(resp.p, resp.len + hex_len)))
             return;
         new[resp.len++] = ',';
+        new[resp.len++] = '\r';
+        new[resp.len++] = '\n';
     }
 
     resp.p = new;

@@ -919,7 +919,7 @@ static void ev_handler(struct mg_connection *c, int ev, void *p)
         const char *p = "";
         if (resp.len)
             p = resp.p;
-        printf("HTTP Response: [%s]\r\n", p);
+        printf("HTTP Response: [\r\n%s]\r\n", p);
         mg_printf_http_chunk(c, "[%s]\r\n", p);
         mg_strfree(&resp);
         mg_send_http_chunk(c, "", 0);
