@@ -200,12 +200,6 @@ void cir_rxbit(struct demod_state *s, unsigned char bit) {
             if (errors >= 3) {
                 s->l2.cirfsk.fec_errors++;
                 decoded = s->l2.cirfsk.rxbitstream >> 10; // if too many error, then don't use FEC result
-                if (s->l2.cirfsk.fec_errors >= 3) {
-                    s->l2.cirfsk.rxbitcount = 0;
-                    verbprintf(1, "CIR> %02d FEC too many error\n", s->l2.cirfsk.rx_buf_pos);
-                    json_builder(mg_mk_str_n(NULL, 0));
-                    return;
-                }
             }
             s->l2.cirfsk.rxbitstream = 0;
             // save data
